@@ -161,8 +161,9 @@ class ConsoleReporter:
                     print(f"    {Color.DIM}User:{Color.RESET}      {safe_str(p.user)}")
                 if p.signature and p.signature.get("status"):
                     sig_stat = p.signature.get("status")
-                    sig_pub = p.signature.get("publisher") or "Unsigned"
-                    print(f"    {Color.DIM}Signature:{Color.RESET} {sig_stat} ({safe_str(sig_pub)[:45]})")
+                    sig_pub = p.signature.get("publisher")
+                    pub_str = f" ({safe_str(sig_pub)[:45]})" if sig_pub else ""
+                    print(f"    {Color.DIM}Signature:{Color.RESET} {sig_stat}{pub_str}")
                 if p.sha256:
                     print(f"    {Color.DIM}SHA256:{Color.RESET}    {p.sha256[:16]}...")
                 if p.network_connections:

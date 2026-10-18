@@ -44,6 +44,20 @@ EXPLOIT_PRONE_PARENTS = {
     "nginx.exe",
     "tomcat.exe",
     "sqlservr.exe",
+    # macOS / Linux equivalents
+    "safari",
+    "safari.exe",
+    "google chrome",
+    "chrome",
+    "firefox",
+    "microsoft word",
+    "microsoft excel",
+    "microsoft powerpoint",
+    "apache2",
+    "httpd",
+    "nginx",
+    "lighttpd",
+    "caddy",
 }
 
 # Dangerous spawned child processes (shells, script hosts, LOLBins)
@@ -58,6 +72,24 @@ DANGEROUS_SPAWNED_CHILDREN = {
     "bash",
     "sh.exe",
     "sh",
+    "zsh",
+    "ksh",
+    "csh",
+    "tcsh",
+    "python",
+    "python3",
+    "python.exe",
+    "python3.exe",
+    "perl",
+    "ruby",
+    "php",
+    "nc",
+    "nc.exe",
+    "ncat",
+    "netcat",
+    "curl",
+    "curl.exe",
+    "wget",
     "wscript.exe",
     "cscript.exe",
     "mshta.exe",
@@ -67,6 +99,7 @@ DANGEROUS_SPAWNED_CHILDREN = {
     "rundll32.exe",
     "vssadmin.exe",
     "whoami.exe",
+    "whoami",
 }
 
 
@@ -226,28 +259,67 @@ class AnomalyDetectionEngine:
                 )
 
         # 14. High entropy / generated random process name
-        entropy_finding = self._check_entropy_and_randomness(clean_name, raw_name, process.pid)
+        entropy_finding = self._check_entropy_and_randomness(clean_name, raw_name, process.pid, process.path)
         if entropy_finding:
             findings.append(entropy_finding)
 
         return findings
 
+    @staticmethod
+    def _path_matches_canonical(candidate_path: str, canonical_path: str) -> bool:
+        """Cross-platform check whether candidate_path is identical or in the same canonical directory."""
+        import ntpath
+        import posixpath
+
+        is_win = (
+            "\\" in canonical_path
+            or (len(canonical_path) >= 2 and canonical_path[1] == ":")
+            or "\\" in candidate_path
+            or (len(candidate_path) >= 2 and candidate_path[1] == ":")
+        )
+
+        if is_win:
+            cand_norm = candidate_path.replace("/", "\\").lower()
+            canon_norm = canonical_path.replace("/", "\\").lower()
+            if cand_norm == canon_norm:
+                return True
+            canon_dir = ntpath.dirname(canon_norm)
+            if not canon_dir.endswith("\\"):
+                canon_dir += "\\"
+            return cand_norm.startswith(canon_dir)
+        else:
+            cand_norm = candidate_path.replace("\\", "/").lower()
+            canon_norm = canonical_path.replace("\\", "/").lower()
+            if cand_norm == canon_norm:
+                return True
+            canon_dir = posixpath.dirname(canon_norm)
+            if not canon_dir.endswith("/"):
+                canon_dir += "/"
+            return cand_norm.startswith(canon_dir)
+
     def _check_canonical_path(
         self, clean_name: str, raw_name: str, path: Optional[str], pid: int
     ) -> Optional[AnomalyFinding]:
         """Validate executable path against canonical operating system directory."""
-        if not path or "win" not in self.platform_name:
+        if not path:
             return None
 
-        # Check with .exe extension
-        exe_name = f"{clean_name}.exe"
-        if exe_name in CANONICAL_OS_PATHS:
-            allowed_paths = [p.lower() for p in CANONICAL_OS_PATHS[exe_name]]
-            norm_path = path.lower()
+        # Look for target in CANONICAL_OS_PATHS (exact clean_name, with .exe, or lower)
+        target_key = None
+        c_lower = clean_name.lower()
+        r_lower = raw_name.lower()
 
-            # Check if current path matches any allowed canonical paths
+        if c_lower in CANONICAL_OS_PATHS:
+            target_key = c_lower
+        elif f"{c_lower}.exe" in CANONICAL_OS_PATHS:
+            target_key = f"{c_lower}.exe"
+        elif r_lower in CANONICAL_OS_PATHS:
+            target_key = r_lower
+
+        if target_key:
+            allowed_paths = CANONICAL_OS_PATHS[target_key]
             matches = any(
-                norm_path == ap or norm_path.startswith(os.path.dirname(ap))
+                self._path_matches_canonical(path, ap)
                 for ap in allowed_paths
             )
             if not matches:
@@ -257,10 +329,10 @@ class AnomalyDetectionEngine:
                     anomaly_type="CANONICAL_PATH_MISMATCH",
                     severity="CRITICAL",
                     description=(
-                        f"Core system process '{exe_name}' running from non-canonical location "
+                        f"Core system process '{target_key}' running from non-canonical location "
                         f"'{path}' (expected '{allowed_paths[0]}'). Masquerading payload alert!"
                     ),
-                    target_os_component=exe_name,
+                    target_os_component=target_key,
                     details={"actual_path": path, "expected_path": allowed_paths[0]},
                 )
         return None
@@ -377,33 +449,76 @@ class AnomalyDetectionEngine:
                 )
             )
 
+        # 6. Linux/macOS Download & Pipe to Shell (curl/wget | sh/bash)
+        if re.search(r"(?:curl|wget)\s+.*\|\s*(?:ba|z)?sh", cmd_lower):
+            findings.append(
+                AnomalyFinding(
+                    process_pid=pid,
+                    process_name=raw_name,
+                    anomaly_type="DOWNLOAD_AND_EXECUTE_CRADLE",
+                    severity="CRITICAL",
+                    description="Command line pipes network download directly into interactive shell (curl/wget | bash/sh).",
+                    details={"command_line": command_line[:200]},
+                )
+            )
+
+        # 7. Reverse Shell Interactive TCP invocation (/dev/tcp or nc -e)
+        if "/dev/tcp/" in cmd_lower or re.search(r"nc(?:\.exe)?\s+-[a-z]*e\s+(?:/bin/)?(?:ba)?sh", cmd_lower):
+            findings.append(
+                AnomalyFinding(
+                    process_pid=pid,
+                    process_name=raw_name,
+                    anomaly_type="REVERSE_SHELL_COMMAND",
+                    severity="CRITICAL",
+                    description="Command line contains interactive reverse TCP socket redirection (/dev/tcp or nc -e).",
+                    details={"command_line": command_line[:200]},
+                )
+            )
+
         return findings
 
     def _check_privilege_mismatch(
         self, clean_name: str, raw_name: str, user: Optional[str], pid: int
     ) -> Optional[AnomalyFinding]:
         """Detect core system processes running as standard users, or user apps elevated as SYSTEM."""
-        if not user or "win" not in self.platform_name:
+        if not user:
             return None
 
         exe_name = f"{clean_name}.exe"
         user_lower = user.lower()
 
-        # Check if a mandatory system process is running as a non-SYSTEM user
-        if exe_name in MANDATORY_SYSTEM_PROCESSES:
-            if "system" not in user_lower and "local service" not in user_lower and "network service" not in user_lower:
-                return AnomalyFinding(
-                    process_pid=pid,
-                    process_name=raw_name,
-                    anomaly_type="PRIVILEGE_MISMATCH",
-                    severity="CRITICAL",
-                    description=(
-                        f"Privilege Mismatch: Mandatory OS process '{exe_name}' running under user account "
-                        f"'{user}' instead of NT AUTHORITY\\SYSTEM. Indicator of process impersonation or user-dropped fake binary!"
-                    ),
-                    target_os_component=exe_name,
-                    details={"user": user, "expected": "NT AUTHORITY\\SYSTEM"},
-                )
+        # Windows: Check if a mandatory system process is running as a non-SYSTEM user
+        if "win" in self.platform_name:
+            if exe_name in MANDATORY_SYSTEM_PROCESSES:
+                if "system" not in user_lower and "local service" not in user_lower and "network service" not in user_lower:
+                    return AnomalyFinding(
+                        process_pid=pid,
+                        process_name=raw_name,
+                        anomaly_type="PRIVILEGE_MISMATCH",
+                        severity="CRITICAL",
+                        description=(
+                            f"Privilege Mismatch: Mandatory OS process '{exe_name}' running under user account "
+                            f"'{user}' instead of NT AUTHORITY\\SYSTEM. Indicator of process impersonation or user-dropped fake binary!"
+                        ),
+                        target_os_component=exe_name,
+                        details={"user": user, "expected": "NT AUTHORITY\\SYSTEM"},
+                    )
+        else:
+            # Linux & macOS: Core init/kernel supervisor processes must run as root (UID 0)
+            if clean_name in ("launchd", "systemd", "kernelmanagerd", "kthreadd"):
+                if user_lower not in ("root", "0", "daemon"):
+                    return AnomalyFinding(
+                        process_pid=pid,
+                        process_name=raw_name,
+                        anomaly_type="PRIVILEGE_MISMATCH",
+                        severity="CRITICAL",
+                        description=(
+                            f"Privilege Mismatch: Mandatory system daemon '{clean_name}' executing under "
+                            f"non-root user '{user}'. Potential masquerading or unauthorized container binary!"
+                        ),
+                        target_os_component=clean_name,
+                        details={"user": user, "expected": "root (UID 0)"},
+                    )
         return None
 
     def _check_signature(
@@ -487,6 +602,18 @@ class AnomalyDetectionEngine:
     ) -> List[AnomalyFinding]:
         """Detect typosquatting, character substitutions (svch0st), and distance anomalies."""
         findings: List[AnomalyFinding] = []
+
+        # Authorized OS baseline binaries (e.g. securityd_system on macOS, systemd-resolved on Linux) are never typosquatting
+        from ..baseline.signatures import DARWIN_BASELINE, LINUX_BASELINE, WINDOWS_BASELINE
+        if (
+            clean_name in DARWIN_BASELINE
+            or clean_name in LINUX_BASELINE
+            or clean_name in WINDOWS_BASELINE
+            or f"{clean_name}.exe" in WINDOWS_BASELINE
+            or raw_name.lower() in DARWIN_BASELINE
+        ):
+            return findings
+
         normalized_name = normalize_homoglyphs(clean_name)
 
         for protected in self.protected_names:
@@ -581,20 +708,42 @@ class AnomalyDetectionEngine:
         return None
 
     def _check_entropy_and_randomness(
-        self, clean_name: str, raw_name: str, pid: int
+        self, clean_name: str, raw_name: str, pid: int, path: Optional[str] = None
     ) -> Optional[AnomalyFinding]:
         """Calculate Shannon entropy to flag auto-generated random executable names."""
-        if len(clean_name) < 12:
+        if len(clean_name) < 14:
             return None
 
-        if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", clean_name):
+        # Ignore standard UUIDs
+        if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", clean_name, re.IGNORECASE):
+            return None
+
+        # Ignore reverse-domain bundle identifiers common on macOS/Linux/Android (e.g. com.apple.audio.SandboxHelper)
+        if re.match(r"^(?:com|org|net|io|apple|gov|edu)\.[a-zA-Z0-9_\-\.]+$", clean_name, re.IGNORECASE):
+            return None
+
+        # Ignore legitimate system directories
+        if path:
+            p_lower = path.lower()
+            if (
+                p_lower.startswith("/system/")
+                or p_lower.startswith("/usr/libexec/")
+                or p_lower.startswith("/usr/sbin/")
+                or p_lower.startswith("/library/apple/")
+                or "\\windows\\system32\\" in p_lower
+                or "\\windows\\syswow64\\" in p_lower
+            ):
+                return None
+
+        # Ignore names with whitespace or standard words
+        if " " in clean_name and sum(c.isalpha() for c in clean_name) / len(clean_name) > 0.7:
             return None
 
         prob = [float(clean_name.count(c)) / len(clean_name) for c in set(clean_name)]
         entropy = -sum(p * math.log(p, 2) for p in prob)
 
         is_hex = bool(re.match(r"^[0-9a-fA-F]{16,}$", clean_name))
-        if is_hex or (entropy > 3.9 and len(clean_name) >= 14):
+        if is_hex or (entropy > 4.2 and len(clean_name) >= 16):
             return AnomalyFinding(
                 process_pid=pid,
                 process_name=raw_name,

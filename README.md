@@ -143,6 +143,14 @@ simulate_triage.py           # Simulated test battery across OSs
 
 ### 1. Run Live Host Audit (Offline Fallback Mode)
 ```bash
+# On macOS / Linux
+./run.sh --offline
+# or
+python3 run_agent.py --offline
+
+# On Windows
+run.bat --offline
+# or
 python run_agent.py --offline
 ```
 
@@ -156,19 +164,52 @@ $env:GEMINI_API_KEY = "your-api-key-here"
 export GEMINI_API_KEY="your-api-key-here"
 
 # Run Agent
-python run_agent.py
+./run.sh
+# or
+python3 run_agent.py
 ```
 Or pass it explicitly:
 ```bash
-python run_agent.py --api-key "your-api-key-here" --model gemini-2.5-flash
+python3 run_agent.py --api-key "your-api-key-here" --model gemini-2.5-flash
 ```
 
-### 3. Export Audit Results to JSON
+### 3. Schedule Automatic Daily Audits on Laptops / Workstations
+```bash
+# On macOS (registers a launchd LaunchAgent in ~/Library/LaunchAgents)
+./setup_daily_schedule.sh 9 0    # Runs daily at 09:00 AM
+
+# On Linux (registers in user crontab)
+./setup_daily_schedule.sh 9 0
+
+# On Windows (registers a Windows Scheduled Task with missed run catch-up)
+setup_daily_schedule.bat
+# or
+powershell -ExecutionPolicy Bypass -File setup_daily_schedule.ps1
+```
+To uninstall:
+```bash
+# macOS / Linux:
+./uninstall_daily_schedule.sh
+
+# Windows:
+uninstall_daily_schedule.bat
+```
+
+### 4. Create Desktop Double-Click Shortcuts
+```bash
+# macOS (creates "Run Host Hygiene.command" on Desktop) / Linux (.desktop):
+./create_desktop_shortcut.sh
+
+# Windows:
+create_desktop_shortcut.bat
+```
+
+### 5. Export Audit Results to JSON
 ```bash
 python run_agent.py --offline --json-out host_hygiene_report.json
 ```
 
-### 4. Custom Whitelisting
+### 6. Custom Whitelisting
 Add custom internal software to the baseline:
 ```bash
 python run_agent.py --whitelist my_internal_daemon.exe custom_agent
@@ -178,7 +219,7 @@ Or specify a JSON whitelist file:
 python run_agent.py --whitelist-file enterprise_baseline.json
 ```
 
-### 5. Automated Host Compliance Verification
+### 7. Automated Host Compliance Verification
 Enforce a minimum Daily Hygiene Score (e.g., fail if score is below 80):
 ```bash
 python run_agent.py --offline --min-score-fail 80

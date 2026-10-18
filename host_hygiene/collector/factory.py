@@ -26,11 +26,11 @@ class CollectorFactory:
         plat = (platform_override or sys.platform).lower()
 
         if "darwin" in plat or "mac" in plat:
-            return DarwinProcessCollector()
+            return DarwinProcessCollector(cache=cache)
         elif "win" in plat:
             return WindowsProcessCollector(cache=cache)
         elif "linux" in plat:
-            return LinuxProcessCollector()
+            return LinuxProcessCollector(cache=cache)
         else:
             # Fallback to linux/proc-based or posix
-            return LinuxProcessCollector()
+            return LinuxProcessCollector(cache=cache)

@@ -143,6 +143,7 @@ DARWIN_BASELINE: Set[str] = {
     "opendirectoryd",
     "fseventsd",
     "securityd",
+    "securityd_system",
     "diskarbitrationd",
     "bluetoothd",
     "wifid",
@@ -166,6 +167,47 @@ DARWIN_BASELINE: Set[str] = {
     "commcenter",
     "coreduetd",
     "coreservicesd",
+    "configd",
+    "notifyd",
+    "amfid",
+    "kernelmanagerd",
+    "watchdogd",
+    "keybagd",
+    "xprotectd",
+    "remoted",
+    "corerepaird",
+    "autofsd",
+    "logind",
+    "apsd",
+    "applecredentialmanagerdaemon",
+    "sandboxd",
+    "corebrightnessd",
+    "kerneleventagent",
+    "dasd",
+    "dirhelper",
+    "symptomsd",
+    "analyticsd",
+    "cloudd",
+    "biometrickitd",
+    "bird",
+    "revisiond",
+    "nsurlsessiond",
+    "deleted",
+    "runningboardd",
+    "duetexpertd",
+    "spindump",
+    "timed",
+    "warmd",
+    "iconservicesagent",
+    "wifip2pd",
+    "audiomxd",
+    "audioanalyticsd",
+    "audioclocksyncd",
+    "audiocomponentregistrar",
+    "accountsd",
+    "analyticsagent",
+    "apfsd",
+    "softwareupdated",
 }
 
 # Canonical standard core protected OS names (used for typosquatting / distance comparison)
@@ -219,8 +261,9 @@ PROTECTED_CORE_NAMES: Dict[str, List[str]] = {
     ],
 }
 
-# Canonical OS Paths for core Windows system binaries
+# Canonical OS Paths for core system binaries across Windows, Linux, and macOS
 CANONICAL_OS_PATHS: Dict[str, List[str]] = {
+    # Windows System Binaries
     "svchost.exe": [r"c:\windows\system32\svchost.exe"],
     "csrss.exe": [r"c:\windows\system32\csrss.exe"],
     "lsass.exe": [r"c:\windows\system32\lsass.exe"],
@@ -234,6 +277,33 @@ CANONICAL_OS_PATHS: Dict[str, List[str]] = {
     "runtimebroker.exe": [r"c:\windows\system32\runtimebroker.exe"],
     "ctfmon.exe": [r"c:\windows\system32\ctfmon.exe"],
     "spoolsv.exe": [r"c:\windows\system32\spoolsv.exe"],
+
+    # Linux System Binaries
+    "systemd": ["/usr/lib/systemd/systemd", "/lib/systemd/systemd", "/bin/systemd"],
+    "systemd-journald": ["/usr/lib/systemd/systemd-journald", "/lib/systemd/systemd-journald"],
+    "systemd-resolved": ["/usr/lib/systemd/systemd-resolved", "/lib/systemd/systemd-resolved"],
+    "systemd-logind": ["/usr/lib/systemd/systemd-logind", "/lib/systemd/systemd-logind"],
+    "init": ["/sbin/init", "/usr/sbin/init"],
+    "sshd": ["/usr/sbin/sshd", "/sbin/sshd"],
+    "cron": ["/usr/sbin/cron", "/usr/sbin/crond"],
+    "auditd": ["/sbin/auditd", "/usr/sbin/auditd"],
+    "dbus-daemon": ["/usr/bin/dbus-daemon", "/bin/dbus-daemon"],
+
+    # macOS System Binaries
+    "launchd": ["/sbin/launchd"],
+    "windowserver": ["/System/Library/CoreServices/WindowServer"],
+    "loginwindow": ["/System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow"],
+    "opendirectoryd": ["/usr/libexec/opendirectoryd"],
+    "securityd": ["/usr/libexec/securityd"],
+    "tccd": ["/System/Library/PrivateFrameworks/TCC.framework/Support/tccd"],
+    "logd": ["/usr/libexec/logd"],
+    "fseventsd": [
+        "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd",
+        "/usr/libexec/fseventsd",
+    ],
+    "cfprefsd": ["/usr/sbin/cfprefsd"],
+    "distnoted": ["/usr/sbin/distnoted"],
+    "usereventagent": ["/usr/sbin/UserEventAgent"],
 }
 
 # Processes that must execute with SYSTEM privileges on Windows
@@ -244,4 +314,5 @@ MANDATORY_SYSTEM_PROCESSES: Set[str] = {
     "services.exe",
     "lsass.exe",
 }
+
 

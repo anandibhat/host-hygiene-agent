@@ -171,7 +171,7 @@ class OfflineTriageEngine(BaseTriageEngine):
             host_recommendations.append("Review authentication logs, anomalous parent processes, and outbound sockets.")
         elif high_count > 0:
             host_recommendations.append("Investigate processes flagged for typosquatting, hidden flags, or anomalous lineage.")
-            host_recommendations.append("Verify Authenticode digital signatures and originating disk paths.")
+            host_recommendations.append("Verify digital code signatures (Authenticode / Apple Codesign / Package verification) and originating disk paths.")
         else:
             host_recommendations.append("Maintain routine host hygiene checks.")
             if unclassified_count > 0:
@@ -181,7 +181,7 @@ class OfflineTriageEngine(BaseTriageEngine):
 
         if suspicious_persist:
             host_recommendations.append(
-                f"Audit {len(suspicious_persist)} autostart persistence item(s) pointing to user-writable directories (AppData/Temp)."
+                f"Audit {len(suspicious_persist)} autostart persistence item(s) pointing to user-writable directories."
             )
 
         return TriageReport(

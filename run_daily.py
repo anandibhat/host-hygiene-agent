@@ -21,25 +21,51 @@ from host_hygiene.reporter.console import ConsoleReporter
 from host_hygiene.reporter.json_exporter import JSONExporter
 
 
-def send_windows_notification(title: str, message: str, is_warning: bool = False):
-    """Show a native Windows notification if running on Windows."""
-    if sys.platform != "win32":
-        return
-    try:
-        import subprocess
-        icon_type = 48 if is_warning else 64  # 48=Warning, 64=Information in Windows Shell.Popup
-        ps_script = f"""
-        $wshell = New-Object -ComObject Wscript.Shell
-        $wshell.Popup('{message}', 5, '{title}', {icon_type}) | Out-Null
-        """
-        subprocess.run(
-            ["powershell.exe", "-NoProfile", "-Command", ps_script],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-    except Exception:
-        pass
+def send_desktop_notification(title: str, message: str, is_warning: bool = False):
+    """Show a native desktop notification across Windows, macOS, and Linux."""
+    import subprocess
+    clean_msg = message.replace('"', '\\"').replace("'", "")
+    clean_title = title.replace('"', '\\"').replace("'", "")
+
+    if sys.platform == "win32":
+        try:
+            icon_type = 48 if is_warning else 64  # 48=Warning, 64=Information in Windows Shell.Popup
+            ps_script = f"""
+            $wshell = New-Object -ComObject Wscript.Shell
+            $wshell.Popup('{clean_msg}', 5, '{clean_title}', {icon_type}) | Out-Null
+            """
+            subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", ps_script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except Exception:
+            pass
+    elif sys.platform == "darwin":
+        try:
+            osa_script = f'display notification "{clean_msg}" with title "{clean_title}"'
+            subprocess.run(
+                ["/usr/bin/osascript", "-e", osa_script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+    else:
+        try:
+            urgency = "critical" if is_warning else "normal"
+            subprocess.run(
+                ["notify-send", "-u", urgency, clean_title, clean_msg],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+
+
+# Retain backward compatibility
+send_windows_notification = send_desktop_notification
 
 
 def run_daily():
@@ -107,7 +133,7 @@ def run_daily():
 
     # 3. Notification alert on anomalies or low score
     if report.anomalies_detected_count > 0 or report.hygiene_score < 75:
-        send_windows_notification(
+        send_desktop_notification(
             title="Host Hygiene Alert!",
             message=f"Hygiene Score: {report.hygiene_score}/100. Flagged {report.anomalies_detected_count} suspicious process(es). Check daily_reports for details.",
             is_warning=True,

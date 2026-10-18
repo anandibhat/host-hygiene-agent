@@ -86,10 +86,11 @@ class OSBaselineFilter:
             if SignatureVerifier.is_trusted_publisher(publisher) or sig.get("status") == "VALID":
                 return True
 
-        # 4. Check if signed by Microsoft / Windows in standard Program Files / System32
+        # 4. Check if signed by Microsoft / Windows / Apple in standard OS directories
         sig = process.signature or {}
-        if sig.get("status") == "VALID":
-            pub = sig.get("publisher", "").lower()
+        sig_valid = sig.get("status") == "VALID"
+        pub = sig.get("publisher", "").lower()
+        if sig_valid:
             if "microsoft" in pub or "lenovo" in pub or "intel" in pub:
                 if process.path and (
                     "\\windows\\" in process.path.lower()
@@ -99,9 +100,37 @@ class OSBaselineFilter:
                     if not process.classification:
                         process.classification = "VerifiedVendor:System"
                     return True
+            if "apple" in pub:
+                if not process.classification:
+                    process.classification = "VerifiedVendor:Apple"
+                return True
+
+        # 4b. Platform-specific path-based baseline filtering (protected system directories)
+        plat = platform_name.lower()
+        if "darwin" in plat or "mac" in plat:
+            if process.path:
+                p_lower = process.path.lower()
+                if (
+                    p_lower.startswith("/system/")
+                    or p_lower.startswith("/usr/libexec/")
+                    or p_lower.startswith("/usr/sbin/")
+                    or p_lower.startswith("/library/apple/")
+                ):
+                    if not process.classification:
+                        process.classification = "OS:Darwin (System Path)"
+                    return True
+        elif "linux" in plat:
+            if process.path:
+                p_lower = process.path.lower()
+                if (
+                    p_lower.startswith("/lib/systemd/")
+                    or p_lower.startswith("/usr/lib/systemd/")
+                ):
+                    if not process.classification:
+                        process.classification = "OS:Linux (System Path)"
+                    return True
 
         # 5. OS-specific baseline signatures
-        plat = platform_name.lower()
         if "darwin" in plat or "mac" in plat:
             if name_lower in DARWIN_BASELINE or clean in DARWIN_BASELINE:
                 if not process.classification:
